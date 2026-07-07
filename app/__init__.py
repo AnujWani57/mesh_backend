@@ -1,0 +1,1 @@
+"""MineMesh FastAPI application package."""
