@@ -6,6 +6,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.alerts import router as alerts_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.nodes import router as nodes_router
+from app.api.routes.readings import router as readings_router
 from app.api.routes.supervisor import router as supervisor_router
 from app.db.database import Base, engine
 from app.db.seed import seed_database
@@ -30,6 +31,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(nodes_router)
 app.include_router(alerts_router)
+app.include_router(readings_router)
 app.include_router(supervisor_router)
 
 

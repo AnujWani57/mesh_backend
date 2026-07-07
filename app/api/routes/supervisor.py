@@ -9,7 +9,7 @@ router = APIRouter(prefix="", tags=["supervisor"])
 
 
 @router.get("/supervisor/home", response_model=SupervisorHomeResponse)
-def supervisor_home(sector_id: str = Query(...), db: Session = Depends(get_db)):
+def supervisor_home(sector_id: str = Query(..., alias="sectorId"), db: Session = Depends(get_db)):
     sector = db.query(Sector).filter(Sector.id == sector_id).first()
     nodes = db.query(Node).filter(Node.sector_id == sector_id).all()
     devices = db.query(WearableDevice).filter(WearableDevice.sector_id == sector_id).all()

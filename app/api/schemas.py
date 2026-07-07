@@ -164,3 +164,28 @@ class SupervisorHomeResponse(BaseModel):
     devicesOnline: int
     sosCount: int
     recentAlerts: List[AlertSummary]
+
+
+class PostReadingRequest(BaseModel):
+    deviceId: str = Field(..., description="Wearable device ID")
+    temperature: float = Field(..., ge=-50, le=60, description="Temperature in Celsius (-50 to 60)")
+    humidity: float = Field(..., ge=0, le=100, description="Humidity percentage (0-100)")
+    methane: float = Field(..., ge=0, description="Methane level in ppm")
+    carbonMonoxide: float = Field(..., ge=0, description="CO level in ppm")
+    oxygen: float = Field(..., ge=0, le=100, description="Oxygen level percentage")
+    heartRate: int = Field(..., ge=40, le=200, description="Heart rate in bpm (40-200)")
+    battery: int = Field(..., ge=0, le=100, description="Battery percentage (0-100)")
+    signalStrength: int = Field(..., ge=-120, le=-30, description="Signal strength in dBm")
+    x: float = Field(..., description="X coordinate")
+    y: float = Field(..., description="Y coordinate")
+    z: float = Field(..., description="Z coordinate")
+    timestamp: str = Field(..., description="ISO format timestamp")
+
+
+class ReadingResponse(BaseModel):
+    readingId: str
+    deviceId: str
+    status: str
+    message: str
+    alertCreated: Optional[bool] = None
+    alertSeverity: Optional[str] = None
