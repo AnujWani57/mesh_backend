@@ -1,12 +1,32 @@
 from datetime import datetime
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.schemas import PostReadingRequest, ReadingResponse
 from app.db.database import get_db
-from app.db.models import Alert, Reading, Threshold, WearableDevice
+from app.db.models import Alert, Reading, Sector, Threshold, WearableDevice
 
 router = APIRouter(prefix="", tags=["readings"])
+
+
+def generate_alert_id(db: Session) -> str:
+    existing = db.query(Alert.id).filter(Alert.id.like("AL-%")).all()
+    max_val = 100
+    for row in existing:
+        alert_id = row[0]
+        if not alert_id:
+            continue
+        parts = alert_id.split("-", 1)
+        if len(parts) != 2:
+            continue
+        try:
+            value = int(parts[1])
+            if value > max_val:
+                max_val = value
+        except ValueError:
+            continue
+    return f"AL-{max_val + 1}"
 
 
 def check_thresholds_and_alert(
@@ -22,6 +42,10 @@ def check_thresholds_and_alert(
     
     # Get threshold for this sector
     threshold = db.query(Threshold).filter(Threshold.scope_id == device.sector_id).first()
+    if not threshold:
+        sector = db.query(Sector).filter(Sector.id == device.sector_id).first()
+        if sector:
+            threshold = db.query(Threshold).filter(Threshold.scope_id == sector.mine_id).first()
     if not threshold:
         return None, None
     
@@ -94,6 +118,7 @@ def check_thresholds_and_alert(
         else:
             # Create new alert
             new_alert = Alert(
+                id=generate_alert_id(db),
                 device_id=device.id,
                 node_id=device.node_id,
                 sector_id=device.sector_id,
@@ -135,46 +160,64 @@ def post_reading(request: PostReadingRequest, db: Session = Depends(get_db)):
     device = db.query(WearableDevice).filter(WearableDevice.id == request.deviceId).first()
     if not device:
         raise HTTPException(status_code=404, detail=f"Device {request.deviceId} not found")
-    
+
+    def rand_float(low: float, high: float, precision: int = 1) -> float:
+        return round(random.uniform(low, high), precision)
+
+    def rand_int(low: int, high: int) -> int:
+        return random.randint(low, high)
+
+    timestamp = request.timestamp or datetime.utcnow()
+
+    temperature = request.temperature if request.temperature is not None else rand_float(28.0, 55.0)
+    humidity = request.humidity if request.humidity is not None else rand_float(40.0, 100.0)
+    methane = request.methane if request.methane is not None else rand_float(0.0, 7000.0)
+    carbon_monoxide = request.carbonMonoxide if request.carbonMonoxide is not None else rand_float(0.0, 150.0)
+    oxygen = request.oxygen if request.oxygen is not None else rand_float(15.0, 22.0)
+    heart_rate = request.heartRate if request.heartRate is not None else rand_int(40, 140)
+    battery = request.battery if request.battery is not None else rand_int(5, 100)
+    signal_strength = request.signalStrength if request.signalStrength is not None else rand_int(-110, -40)
+    x = request.x if request.x is not None else rand_float(0.0, 200.0, 2)
+    y = request.y if request.y is not None else rand_float(0.0, 200.0, 2)
+    z = request.z if request.z is not None else rand_float(0.0, 20.0, 2)
+
     # Create reading record
     reading = Reading(
         device_id=request.deviceId,
-        temperature=request.temperature,
-        humidity=request.humidity,
-        methane=request.methane,
-        carbon_monoxide=request.carbonMonoxide,
-        oxygen=request.oxygen,
-        heart_rate=request.heartRate,
-        x=request.x,
-        y=request.y,
-        z=request.z,
-        recorded_at=request.timestamp,
+        temperature=temperature,
+        humidity=humidity,
+        methane=methane,
+        carbon_monoxide=carbon_monoxide,
+        oxygen=oxygen,
+        heart_rate=heart_rate,
+        x=x,
+        y=y,
+        z=z,
+        recorded_at=timestamp,
     )
     db.add(reading)
     db.flush()  # Get the ID without committing
     reading_id = reading.id
-    
+
     # Update device status
-    device.battery = request.battery
-    device.signal_strength = request.signalStrength
+    device.battery = battery
+    device.signal_strength = signal_strength
     device.last_updated = datetime.utcnow()
-    
-    # Determine device status based on sensor data and connection
-    if request.signalStrength < -100:
+
+    if signal_strength < -100:
         device.status = "offline"
-    elif request.battery < 10:
+    elif battery < 10:
         device.status = "low_battery"
     else:
         device.status = "online"
-    
+
     db.commit()
-    
-    # Check thresholds and handle alerts
+
     alert_created, alert_severity = check_thresholds_and_alert(
-        device, request.temperature, request.humidity, request.methane,
-        request.carbonMonoxide, request.oxygen, db
+        device, temperature, humidity, methane,
+        carbon_monoxide, oxygen, db
     )
-    
+
     return ReadingResponse(
         readingId=reading_id,
         deviceId=request.deviceId,

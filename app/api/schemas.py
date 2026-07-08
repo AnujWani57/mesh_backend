@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -139,6 +140,32 @@ class AlertSummary(BaseModel):
     coordinates: Coordinates
 
 
+class AlertListItem(BaseModel):
+    id: str
+    deviceId: str
+    nodeId: str
+    sectorId: str
+    time: str
+    hazard: str
+    severity: str
+    state: str
+    acknowledgedBy: Optional[str] = None
+    readingValue: Optional[float] = None
+    readingUnit: Optional[str] = None
+
+
+class PaginationMeta(BaseModel):
+    page: int
+    limit: int
+    totalCount: int
+    totalPages: int
+
+
+class AlertListResponse(BaseModel):
+    data: List[AlertListItem]
+    meta: PaginationMeta
+
+
 class AdminDashboardResponse(BaseModel):
     totalSectors: int
     totalNodes: int
@@ -168,18 +195,18 @@ class SupervisorHomeResponse(BaseModel):
 
 class PostReadingRequest(BaseModel):
     deviceId: str = Field(..., description="Wearable device ID")
-    temperature: float = Field(..., ge=-50, le=60, description="Temperature in Celsius (-50 to 60)")
-    humidity: float = Field(..., ge=0, le=100, description="Humidity percentage (0-100)")
-    methane: float = Field(..., ge=0, description="Methane level in ppm")
-    carbonMonoxide: float = Field(..., ge=0, description="CO level in ppm")
-    oxygen: float = Field(..., ge=0, le=100, description="Oxygen level percentage")
-    heartRate: int = Field(..., ge=40, le=200, description="Heart rate in bpm (40-200)")
-    battery: int = Field(..., ge=0, le=100, description="Battery percentage (0-100)")
-    signalStrength: int = Field(..., ge=-120, le=-30, description="Signal strength in dBm")
-    x: float = Field(..., description="X coordinate")
-    y: float = Field(..., description="Y coordinate")
-    z: float = Field(..., description="Z coordinate")
-    timestamp: str = Field(..., description="ISO format timestamp")
+    temperature: Optional[float] = Field(None, description="Temperature in Celsius")
+    humidity: Optional[float] = Field(None, description="Humidity percentage")
+    methane: Optional[float] = Field(None, description="Methane level in ppm")
+    carbonMonoxide: Optional[float] = Field(None, description="CO level in ppm")
+    oxygen: Optional[float] = Field(None, description="Oxygen level percentage")
+    heartRate: Optional[int] = Field(None, description="Heart rate in bpm")
+    battery: Optional[int] = Field(None, description="Battery percentage")
+    signalStrength: Optional[int] = Field(None, description="Signal strength in dBm")
+    x: Optional[float] = Field(None, description="X coordinate")
+    y: Optional[float] = Field(None, description="Y coordinate")
+    z: Optional[float] = Field(None, description="Z coordinate")
+    timestamp: Optional[datetime] = Field(None, description="ISO format timestamp")
 
 
 class ReadingResponse(BaseModel):

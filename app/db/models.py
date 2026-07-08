@@ -90,7 +90,7 @@ class Reading(Base):
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=lambda: str(uuid4()))
     device_id = Column(String, nullable=False)
     node_id = Column(String, nullable=False)
     sector_id = Column(String, nullable=False)
