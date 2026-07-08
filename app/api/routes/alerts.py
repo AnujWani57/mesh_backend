@@ -79,6 +79,24 @@ def apply_hazard_filter(query, hazard: Optional[str]):
     return query
 
 
+@router.get("/alerts", response_model=AlertListResponse)
+def get_all_alerts(
+    sector_id: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1),
+    hazard: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Alert)
+    if state:
+        query = query.filter(Alert.state == state)
+    if sector_id:
+        query = query.filter(Alert.sector_id == sector_id)
+    query = apply_hazard_filter(query, hazard)
+    return get_paginated_alerts(query, page, limit)
+
+
 @router.get("/alerts/active", response_model=AlertListResponse)
 def get_active_alerts(
     sector_id: Optional[str] = Query(default=None),
