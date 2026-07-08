@@ -244,6 +244,11 @@ class SupervisorHomeResponse(BaseModel):
     recentAlerts: List[AlertSummary]
 
 
+class PostSOSRequest(BaseModel):
+    deviceId: str = Field(..., description="Wearable device ID triggering the SOS")
+    timestamp: Optional[datetime] = Field(None, description="ISO format timestamp")
+
+
 class PostReadingRequest(BaseModel):
     deviceId: str = Field(..., description="Wearable device ID")
     temperature: Optional[float] = Field(None, description="Temperature in Celsius")

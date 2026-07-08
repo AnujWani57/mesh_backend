@@ -4,14 +4,15 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import EventSourceResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.schemas import AlertListResponse, AlertListItem, AlertSummary
-from app.api.sse import register_sos_subscriber, unregister_sos_subscriber
+from app.api.schemas import AlertListResponse, AlertListItem, AlertSummary, PostSOSRequest
+from app.api.sse import register_sos_subscriber, unregister_sos_subscriber, notify_sos_event
 from app.db.database import get_db
-from app.db.models import Alert
+from app.db.models import Alert, WearableDevice
+from app.api.routes.readings import generate_alert_id
 
 router = APIRouter(prefix="", tags=["alerts"])
 
@@ -119,8 +120,7 @@ def stream_sos_events():
                 yield f"data: {json.dumps(alert_payload)}\n\n"
         finally:
             unregister_sos_subscriber(queue)
-
-    return EventSourceResponse(event_generator())
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/alerts/summary")
@@ -174,3 +174,55 @@ def acknowledge_alert(alert_id: str, payload: Dict, db: Session = Depends(get_db
         },
         "coordinates": {"x": alert.x, "y": alert.y, "z": alert.z},
     }
+
+
+@router.post("/alerts/sos", status_code=status.HTTP_201_CREATED)
+def trigger_sos(request: PostSOSRequest, db: Session = Depends(get_db)):
+    """
+    Manually trigger an SOS alert from a wearable device.
+    """
+    device = db.query(WearableDevice).filter(WearableDevice.id == request.deviceId).first()
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device {request.deviceId} not found")
+
+    new_alert = Alert(
+        id=generate_alert_id(db),
+        device_id=device.id,
+        node_id=device.node_id,
+        sector_id=device.sector_id,
+        worker_name=device.worker_name,
+        hazard="SOS Button Pressed",
+        severity="critical",
+        state="active",
+        acknowledged_by=None,
+        temperature=0.0,
+        humidity=0.0,
+        methane=0.0,
+        carbon_monoxide=0.0,
+        oxygen=0.0,
+        x=0.0,
+        y=0.0,
+        z=0.0,
+        created_at=request.timestamp or datetime.utcnow(),
+    )
+    db.add(new_alert)
+    db.commit()
+    
+    notify_sos_event({
+        "id": new_alert.id,
+        "deviceId": new_alert.device_id,
+        "nodeId": new_alert.node_id,
+        "sectorId": new_alert.sector_id,
+        "workerName": new_alert.worker_name,
+        "hazard": new_alert.hazard,
+        "severity": new_alert.severity,
+        "state": new_alert.state,
+        "time": new_alert.created_at.isoformat(),
+        "temperature": new_alert.temperature,
+        "humidity": new_alert.humidity,
+        "methane": new_alert.methane,
+        "carbonMonoxide": new_alert.carbon_monoxide,
+        "oxygen": new_alert.oxygen,
+    })
+
+    return {"status": "success", "message": "SOS alert triggered successfully", "alertId": new_alert.id}
