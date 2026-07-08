@@ -140,6 +140,57 @@ class AlertSummary(BaseModel):
     coordinates: Coordinates
 
 
+class AdminStatsResponse(BaseModel):
+    totalSectors: int
+    totalNodes: int
+    totalDevices: int
+    activeDevices: int
+    inactiveDevices: int
+    activeAlerts: int
+    workersInside: int
+
+
+class TrendPoint(BaseModel):
+    time: str
+    temperature: float
+    humidity: float
+    methane: float
+    carbonMonoxide: float
+    oxygen: float
+
+
+class EnvironmentHealth(BaseModel):
+    safe: int
+    warning: int
+    critical: int
+
+
+class AdminEnvironmentResponse(BaseModel):
+    averageReadings: SensorReadings
+    trends: List[TrendPoint]
+    health: EnvironmentHealth
+
+
+class SupervisorStatsResponse(BaseModel):
+    sectorId: str
+    sectorName: Optional[str]
+    status: str
+    totalWorkers: int
+    devicesOnline: int
+    sosCount: int
+
+
+class SupervisorEnvironmentResponse(BaseModel):
+    averageReadings: SensorReadings
+    trends: List[TrendPoint]
+
+
+class NodeStatusItem(BaseModel):
+    id: str
+    name: str
+    status: str
+
+
 class AlertListItem(BaseModel):
     id: str
     deviceId: str

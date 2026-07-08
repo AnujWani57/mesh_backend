@@ -1,63 +1,84 @@
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.schemas import AdminDashboardResponse, SectorSummary, SupervisorSummary
+from app.api.schemas import (
+    AdminDashboardResponse,
+    AdminEnvironmentResponse,
+    AdminStatsResponse,
+    SectorSummary,
+    SupervisorSummary,
+    TrendPoint,
+)
 from app.db.database import get_db
-from app.db.models import Alert, Node, Sector, User, WearableDevice
+from app.db.models import Alert, Node, Reading, Sector, User, WearableDevice
 
 router = APIRouter(prefix="", tags=["admin"])
 
 
-@router.get("/admin/dashboard", response_model=AdminDashboardResponse)
-def admin_dashboard(db: Session = Depends(get_db)):
-    sectors = db.query(Sector).all()
-    nodes = db.query(Node).all()
-    devices = db.query(WearableDevice).all()
-    alerts = db.query(Alert).filter(Alert.state == "active").all()
+@router.get("/admin/stats", response_model=AdminStatsResponse)
+def admin_stats(db: Session = Depends(get_db)):
+    total_sectors = db.query(func.count(Sector.id)).scalar() or 0
+    total_nodes = db.query(func.count(Node.id)).scalar() or 0
+    total_devices = db.query(func.count(WearableDevice.id)).scalar() or 0
+    active_devices = db.query(func.count(WearableDevice.id)).filter(WearableDevice.status == "online").scalar() or 0
+    inactive_devices = total_devices - active_devices
+    active_alerts = db.query(func.count(Alert.id)).filter(Alert.state == "active").scalar() or 0
     return {
-        "totalSectors": len(sectors),
-        "totalNodes": len(nodes),
-        "totalDevices": len(devices),
-        "activeDevices": len([d for d in devices if d.status == "online"]),
-        "inactiveDevices": len([d for d in devices if d.status != "online"]),
-        "activeAlerts": len(alerts),
-        "workersInside": len(devices),
-        "averageReadings": {
-            "temperature": 31,
-            "humidity": 61,
-            "methane": 1180,
-            "carbonMonoxide": 17,
-            "oxygen": 20.3,
-        },
-        "trends": [
-            {"time": "09:00", "temperature": 31, "humidity": 61, "methane": 1180, "carbonMonoxide": 17, "oxygen": 20.3}
-        ],
-        "health": {"safe": 0, "warning": 2, "critical": 1},
-        "recentAlerts": [
-            {
-                "id": alert.id,
-                "deviceId": alert.device_id,
-                "workerName": alert.worker_name,
-                "nodeId": alert.node_id,
-                "sectorId": alert.sector_id,
-                "hazard": alert.hazard,
-                "severity": alert.severity,
-                "time": alert.created_at.isoformat(),
-                "state": alert.state,
-                "acknowledgedBy": alert.acknowledged_by,
-                "readings": {
-                    "temperature": alert.temperature,
-                    "humidity": alert.humidity,
-                    "methane": alert.methane,
-                    "carbonMonoxide": alert.carbon_monoxide,
-                    "oxygen": alert.oxygen,
-                },
-                "coordinates": {"x": alert.x, "y": alert.y, "z": alert.z},
-            }
-            for alert in alerts[:5]
-        ],
+        "totalSectors": total_sectors,
+        "totalNodes": total_nodes,
+        "totalDevices": total_devices,
+        "activeDevices": active_devices,
+        "inactiveDevices": inactive_devices,
+        "activeAlerts": active_alerts,
+        "workersInside": total_devices,
+    }
+
+
+@router.get("/admin/environment", response_model=AdminEnvironmentResponse)
+def admin_environment(db: Session = Depends(get_db)):
+    avg_values = db.query(
+        func.avg(Reading.temperature),
+        func.avg(Reading.humidity),
+        func.avg(Reading.methane),
+        func.avg(Reading.carbon_monoxide),
+        func.avg(Reading.oxygen),
+    ).one()
+    avg_readings = {
+        "temperature": float(avg_values[0] or 0.0),
+        "humidity": float(avg_values[1] or 0.0),
+        "methane": float(avg_values[2] or 0.0),
+        "carbonMonoxide": float(avg_values[3] or 0.0),
+        "oxygen": float(avg_values[4] or 0.0),
+    }
+    recent_readings = (
+        db.query(Reading)
+        .order_by(Reading.recorded_at.desc())
+        .limit(5)
+        .all()
+    )
+    trends = [
+        {
+            "time": r.recorded_at.strftime("%H:%M"),
+            "temperature": r.temperature,
+            "humidity": r.humidity,
+            "methane": r.methane,
+            "carbonMonoxide": r.carbon_monoxide,
+            "oxygen": r.oxygen,
+        }
+        for r in reversed(recent_readings)
+    ]
+    health_counts = {
+        "safe": db.query(func.count(Sector.id)).filter(Sector.status == "safe").scalar() or 0,
+        "warning": db.query(func.count(Sector.id)).filter(Sector.status == "warning").scalar() or 0,
+        "critical": db.query(func.count(Sector.id)).filter(Sector.status == "critical").scalar() or 0,
+    }
+    return {
+        "averageReadings": avg_readings,
+        "trends": trends,
+        "health": health_counts,
     }
 
 
