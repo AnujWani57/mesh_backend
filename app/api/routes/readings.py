@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.schemas import PostReadingRequest, ReadingResponse
+from app.api.sse import notify_sos_event
 from app.db.database import get_db
 from app.db.models import Alert, Reading, Sector, Threshold, WearableDevice
 
@@ -115,6 +116,23 @@ def check_thresholds_and_alert(
             existing_alert.carbon_monoxide = carbon_monoxide
             existing_alert.oxygen = oxygen
             existing_alert.created_at = datetime.utcnow()
+            db.commit()
+            notify_sos_event({
+                "id": existing_alert.id,
+                "deviceId": existing_alert.device_id,
+                "nodeId": existing_alert.node_id,
+                "sectorId": existing_alert.sector_id,
+                "workerName": existing_alert.worker_name,
+                "hazard": existing_alert.hazard,
+                "severity": existing_alert.severity,
+                "state": existing_alert.state,
+                "time": existing_alert.created_at.isoformat(),
+                "temperature": existing_alert.temperature,
+                "humidity": existing_alert.humidity,
+                "methane": existing_alert.methane,
+                "carbonMonoxide": existing_alert.carbon_monoxide,
+                "oxygen": existing_alert.oxygen,
+            })
         else:
             # Create new alert
             new_alert = Alert(
@@ -138,8 +156,24 @@ def check_thresholds_and_alert(
                 created_at=datetime.utcnow(),
             )
             db.add(new_alert)
+            db.commit()
+            notify_sos_event({
+                "id": new_alert.id,
+                "deviceId": new_alert.device_id,
+                "nodeId": new_alert.node_id,
+                "sectorId": new_alert.sector_id,
+                "workerName": new_alert.worker_name,
+                "hazard": new_alert.hazard,
+                "severity": new_alert.severity,
+                "state": new_alert.state,
+                "time": new_alert.created_at.isoformat(),
+                "temperature": new_alert.temperature,
+                "humidity": new_alert.humidity,
+                "methane": new_alert.methane,
+                "carbonMonoxide": new_alert.carbon_monoxide,
+                "oxygen": new_alert.oxygen,
+            })
         
-        db.commit()
         return True, severity
     
     return None, None

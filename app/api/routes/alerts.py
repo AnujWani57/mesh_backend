@@ -1,11 +1,15 @@
+import asyncio
+import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import EventSourceResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.schemas import AlertListResponse, AlertListItem, AlertSummary
+from app.api.sse import register_sos_subscriber, unregister_sos_subscriber
 from app.db.database import get_db
 from app.db.models import Alert
 
@@ -68,16 +72,24 @@ def get_paginated_alerts(query, page: int, limit: int):
     }
 
 
+def apply_hazard_filter(query, hazard: Optional[str]):
+    if hazard:
+        return query.filter(Alert.hazard == hazard)
+    return query
+
+
 @router.get("/alerts/active", response_model=AlertListResponse)
 def get_active_alerts(
     sector_id: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1),
+    hazard: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = db.query(Alert).filter(Alert.state == "active")
     if sector_id:
         query = query.filter(Alert.sector_id == sector_id)
+    query = apply_hazard_filter(query, hazard)
     return get_paginated_alerts(query, page, limit)
 
 
@@ -86,12 +98,29 @@ def get_resolved_alerts(
     sector_id: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=5, ge=1),
+    hazard: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = db.query(Alert).filter(Alert.state == "resolved")
     if sector_id:
         query = query.filter(Alert.sector_id == sector_id)
+    query = apply_hazard_filter(query, hazard)
     return get_paginated_alerts(query, page, limit)
+
+
+@router.get("/alerts/stream")
+def stream_sos_events():
+    async def event_generator():
+        queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+        register_sos_subscriber(queue)
+        try:
+            while True:
+                alert_payload = await queue.get()
+                yield f"data: {json.dumps(alert_payload)}\n\n"
+        finally:
+            unregister_sos_subscriber(queue)
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/alerts/summary")
