@@ -55,7 +55,7 @@ def get_nodes(sector_id: Optional[str] = Query(default=None), db: Session = Depe
     nodes = query.all()
     response = []
     for node in nodes:
-        devices = db.query(WearableDevice).filter(WearableDevice.node_id == node.id).all()
+        devices = db.query(WearableDevice).filter(WearableDevice.node_id == node.id).order_by(WearableDevice.id).all()
         response.append(
             {
                 "id": node.id,
@@ -77,7 +77,7 @@ def get_node(node_id: str, db: Session = Depends(get_db)):
     node = db.query(Node).filter(Node.id == node_id).first()
     if not node:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    devices = db.query(WearableDevice).filter(WearableDevice.node_id == node.id).all()
+    devices = db.query(WearableDevice).filter(WearableDevice.node_id == node.id).order_by(WearableDevice.id).all()
     return {
         "id": node.id,
         "name": node.name,

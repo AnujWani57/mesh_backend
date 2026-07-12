@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.schemas import AlertListResponse, AlertListItem, AlertSummary, PostSOSRequest
 from app.api.sse import register_sos_subscriber, unregister_sos_subscriber, notify_sos_event
 from app.db.database import get_db
-from app.db.models import Alert, WearableDevice
+from app.db.models import Alert, Sector, Threshold, WearableDevice
 from app.api.routes.readings import generate_alert_id
 
 router = APIRouter(prefix="", tags=["alerts"])
@@ -99,15 +100,12 @@ def get_all_alerts(
 
 @router.get("/alerts/active", response_model=AlertListResponse)
 def get_active_alerts(
-    sector_id: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1),
     hazard: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ):
     query = db.query(Alert).filter(Alert.state == "active")
-    if sector_id:
-        query = query.filter(Alert.sector_id == sector_id)
     query = apply_hazard_filter(query, hazard)
     return get_paginated_alerts(query, page, limit)
 
@@ -161,6 +159,68 @@ def get_alerts_summary(
         "activeCount": active_query.count(),
         "resolvedCount": resolved_query.count(),
         "totalToday": today_query.count(),
+    }
+
+
+@router.get("/alerts/{alert_id}")
+def get_alert_by_id(alert_id: str, db: Session = Depends(get_db)):
+    """
+    Retrieve full details for a single alert by its ID.
+    Includes threshold values so the frontend can highlight which reading triggered the alert.
+    Coordinates are randomised for map display.
+    """
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
+
+    # Resolve threshold: sector-level first, then mine-level fallback
+    threshold = db.query(Threshold).filter(Threshold.scope_id == alert.sector_id).first()
+    if not threshold:
+        sector = db.query(Sector).filter(Sector.id == alert.sector_id).first()
+        if sector:
+            threshold = db.query(Threshold).filter(Threshold.scope_id == sector.mine_id).first()
+
+    threshold_data = None
+    if threshold:
+        threshold_data = {
+            "temperatureWarning": threshold.temperature_warning,
+            "temperatureCritical": threshold.temperature_critical,
+            "humidityWarning": threshold.humidity_warning,
+            "humidityCritical": threshold.humidity_critical,
+            "methaneWarning": threshold.methane_warning,
+            "methaneCritical": threshold.methane_critical,
+            "coWarning": threshold.co_warning,
+            "coCritical": threshold.co_critical,
+            "oxygenWarningLow": threshold.oxygen_warning_low,
+            "oxygenCriticalLow": threshold.oxygen_critical_low,
+            "oxygenWarningHigh": threshold.oxygen_warning_high,
+            "oxygenCriticalHigh": threshold.oxygen_critical_high,
+        }
+
+    return {
+        "id": alert.id,
+        "deviceId": alert.device_id,
+        "workerName": alert.worker_name,
+        "nodeId": alert.node_id,
+        "sectorId": alert.sector_id,
+        "hazard": alert.hazard,
+        "severity": alert.severity,
+        "time": alert.created_at.isoformat(),
+        "state": alert.state,
+        "acknowledgedBy": alert.acknowledged_by,
+        "readings": {
+            "temperature": alert.temperature,
+            "humidity": alert.humidity,
+            "methane": alert.methane,
+            "carbonMonoxide": alert.carbon_monoxide,
+            "oxygen": alert.oxygen,
+        },
+        "thresholds": threshold_data,
+        "coordinates": {
+            "x": round(random.uniform(10.0, 90.0), 2),
+            "y": round(random.uniform(10.0, 90.0), 2),
+            "z": round(random.uniform(0.0, 50.0), 2),
+        },
     }
 
 

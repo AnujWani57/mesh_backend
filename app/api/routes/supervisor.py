@@ -61,8 +61,8 @@ def supervisor_home(sector_id: str = Query(..., alias="sectorId"), db: Session =
 @router.get("/supervisor/sector/{sector_id}/stats", response_model=SupervisorStatsResponse)
 def supervisor_sector_stats(sector_id: str, db: Session = Depends(get_db)):
     sector = db.query(Sector).filter(Sector.id == sector_id).first()
-    devices = db.query(WearableDevice).filter(WearableDevice.sector_id == sector_id).all()
-    alerts = db.query(Alert).filter(Alert.sector_id == sector_id).all()
+    devices = db.query(WearableDevice).all()
+    alerts = db.query(Alert).all()
     return {
         "sectorId": sector_id,
         "sectorName": sector.name if sector else None,
@@ -70,6 +70,7 @@ def supervisor_sector_stats(sector_id: str, db: Session = Depends(get_db)):
         "totalWorkers": len(devices),
         "devicesOnline": len([device for device in devices if device.status == "online"]),
         "sosCount": len([alert for alert in alerts if alert.hazard == "SOS Button Pressed"]),
+        "activeSosCount": len([alert for alert in alerts if alert.hazard == "SOS Button Pressed" and alert.state == "active"]),
     }
 
 
@@ -122,7 +123,7 @@ def supervisor_sector_environment(sector_id: str, db: Session = Depends(get_db))
 
 @router.get("/supervisor/sector/{sector_id}/nodes", response_model=List[NodeStatusItem])
 def supervisor_sector_nodes(sector_id: str, db: Session = Depends(get_db)):
-    nodes = db.query(Node).filter(Node.sector_id == sector_id).all()
+    nodes = db.query(Node).all()
     return [
         {"id": node.id, "name": node.name, "status": node.status}
         for node in nodes

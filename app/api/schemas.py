@@ -178,6 +178,7 @@ class SupervisorStatsResponse(BaseModel):
     totalWorkers: int
     devicesOnline: int
     sosCount: int
+    activeSosCount: int
 
 
 class SupervisorEnvironmentResponse(BaseModel):
